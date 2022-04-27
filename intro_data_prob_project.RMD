@@ -1,0 +1,328 @@
+---
+title: "Exploring the BRFSS data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+    author: Ato Aikins
+---
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(maps)
+```
+
+
+
+```{r load-data}
+load("brfss2013.RData")
+```
+
+
+
+* * *
+
+
+## Part 1: Data
+The Behavioral Risk Factor Surveillance System (BRFSS) is done by collecting data from all 50 states including other territories of the United States through monthly telephone interviews. Since the sampling process is random, it is more likely the resulting sample is representative of the population. Therefore, the study's results are generalizable to the whole population. Furthermore, this is an observational study, thus only correlation inferences can be made. It is not possible to establish causality since this can only be achieved through experimental studies where most confounding variables are well controlled and subjects are randomly assigned to groups.
+
+* * *
+
+## Part 2: Research questions
+
+**Research question 1: How does general health vary by gender and state. Variations in health could affect  productivity of both males and females. This question also seeks to determine whether there is a correlation between health and gender and health and the State of residence. **
+
+* * *
+
+**Research question 2: Is there a correlation between attaining  a higher education and the likelihood of owning a home? This question is important because it is generally thought that high socioeconomic status, which also includes owning a home is associated with attaining higher education**
+
+* * *
+
+**Research question 3: Is there an association between sleep hours and ever being told of having blood pressure between males and females. This question is important since not getting enough sleep at night could increase stress and the risk of high blood pressure. On the other hand, high blood pressure could induce sleepless nights leading to less amount of sleep each night. I will also explore whether these vary by sex. **
+
+
+* * *
+
+**Research question 1:**
+I first determined whether the variables of interest are present in the dataset and how they are presented.
+
+```{r}
+grep("genhlth", names(brfss2013), value = TRUE)
+grep("sex", names(brfss2013), value = TRUE)
+grep("state", names(brfss2013), value = TRUE)
+```
+From the outputs, "state" is presented as "X_state". Thus this variable will be used in consequent codes.
+
+* * *
+
+I explored whether more males or females have a better general health status.
+
+The code below excludes all NA and store the resulting dataframe in a new variable: brfss2013CleansedGenhlth
+
+* * *
+
+```{r}
+brfss2013CleansedGenhlth <- brfss2013 %>%
+  filter(!is.na(brfss2013$sex), !is.na(brfss2013$genhlth))
+```
+
+The code below was used to generate the bar graph that depicts the general health status of both males and females:
+
+```{r}
+ggplot(aes(x=genhlth, fill=sex), data = brfss2013CleansedGenhlth) +
+  geom_bar(position = position_dodge()) +
+  ggtitle('General Health Status of males and females') +
+  xlab("General Health Categories") +
+  ylab("Number of Responses")
+```
+
+* * *
+
+From the graph, it seems females have a better health than males. However this could be misleading since the proportions may differ. That is, there could be more respondents who are females as compared to males. To check for this factor, I grouped the data by gender and calculated the proportions for the different health categories.
+
+* * *
+
+```{r}
+#Step 1
+brfss2013MaleGenhlth <- brfss2013CleansedGenhlth %>%
+  group_by(sex,genhlth) %>% 
+  filter(sex == "Male") %>% 
+  summarise(count =n())
+#Step 2
+brfss2013MaleGenhlth <- brfss2013MaleGenhlth %>% 
+  mutate(Proportion = (count/sum(brfss2013MaleGenhlth$count))*100)
+#Step 3
+newMaleGenhlth <- brfss2013MaleGenhlth %>%
+ select(sex, genhlth, Proportion)
+```
+
+* * *
+
+What the above code does in Step 1 is to group the data by sex and general health and then filter out only males. In Step 2, a new column is created with the variable "Proportion" that finds the proportions of males in each category. In Step 3, the variables sex, genhlth and Proportion are selected and assigned to a new variable newMaleGenhlth. The same process is repeated for the "Female" observation for "genhlth" below:
+
+* * *
+
+```{r}
+brfss2013FemaleGenhlth <- brfss2013CleansedGenhlth %>%
+  group_by(sex,genhlth) %>% 
+  filter(sex == "Female") %>% 
+  summarise(count =n())
+
+brfss2013FemaleGenhlth <- brfss2013FemaleGenhlth %>% 
+  mutate(Proportion = (count/sum(brfss2013FemaleGenhlth$count))*100)
+
+newFemaleGenhlth <- brfss2013FemaleGenhlth %>%
+  select(sex,genhlth, Proportion)
+```
+The two dataframes are then merged to form one dataframe called MaleAndFemaleGenhlth. This will be used to plot a graph later. Also the data can be printed to the screen to show the various proportions for the categories of general health.
+
+```{r}
+MaleAndFemaleGenhlth <- rbind(newFemaleGenhlth, newMaleGenhlth)
+print(MaleAndFemaleGenhlth)
+```
+
+* * *
+
+From the above table, it can be observed that there is very little variation between the various categories of genhlth among males and females. For a more visual representation, I used to code below to show it in a graph:
+
+```{r}
+ggplot(aes(x=sex, y=Proportion, color=genhlth), data = MaleAndFemaleGenhlth) +
+  geom_count() +
+  ggtitle('General Health Status of males and females') +
+  xlab("Gender") +
+  ylab("Proportion")
+```
+
+* * *
+
+From the graph above, it can be seen that the general health categories, i.e. Excellent, very good, good, fair and poor do not vary considerably between Male and Female.
+
+I wanted to further explore how these  general health differs by state and also how that of males and females differs by state. To do this, I created new dataframes called: "HlthByStateAll" (Step 1), "HlthByStateFemale" (Step 2) and "HlthByStateMale"(Step 3) using the codes below: The variables in this code have been grouped and sorted by "state" and "genhlth".
+
+
+```{r}
+#Step 1
+HlthByStateAll <- data.frame(genhlth = brfss2013CleansedGenhlth$genhlth,
+                            state = tolower(brfss2013CleansedGenhlth$X_state),
+                            gender = brfss2013CleansedGenhlth$sex)
+HlthByStateAll <-  HlthByStateAll %>% 
+                      group_by(state,genhlth) %>% 
+                      summarise (count = n()) 
+HlthByStateAll <-  arrange(HlthByStateAll, state, -count) #this line orders
+#the states by the highest response to the "genhlth" category. Eg. if most
+#people responded "very good" for that state, that is placed first.
+
+#Step 2
+HlthByStateFemale <-  data.frame(genhlth = brfss2013CleansedGenhlth$genhlth,
+                            state = tolower(brfss2013CleansedGenhlth$X_state),
+                            gender = brfss2013CleansedGenhlth$sex) %>% 
+                            filter(brfss2013CleansedGenhlth$sex == "Female")
+HlthByStateFemale <-  HlthByStateFemale %>% 
+                      group_by(state,genhlth) %>% 
+                      summarise (count = n()) 
+HlthByStateFemale <-  arrange(HlthByStateFemale, state, -count) 
+
+#Step 3
+HlthByStateMale <- data.frame(genhlth = brfss2013CleansedGenhlth$genhlth,
+                      state = tolower(brfss2013CleansedGenhlth$X_state),
+                      gender = brfss2013CleansedGenhlth$sex) %>% 
+                      filter(brfss2013CleansedGenhlth$sex == "Male")
+HlthByStateMale <-  HlthByStateMale %>% 
+                      group_by(state,genhlth) %>% 
+                      summarise (count = n()) 
+HlthByStateMale <-  arrange(HlthByStateMale, state, -count)
+
+```
+
+Then I created a map object of the US called "map".
+```{r}
+map <- map_data("state")
+```
+
+Using the code below, I created three maps and stored their coordinates and characteristics in the variable mapAll, mapFemale and mapMale corresponding to the responses grouped by 1)mapALL: all responses by state, 2)mapFemale: responses of females by state and 3)mapMale: responses of males by state.
+
+```{r}
+mapAll <- ggplot (data = HlthByStateAll, aes(fill = genhlth))+ 
+  geom_map(aes(map_id = state), map = map, colour = "gray") + 
+  expand_limits(x = map$long, y = map$lat) +
+  ggtitle('General Health Condition of all Respondents across various US States') 
+
+mapFemale <- ggplot (data = HlthByStateFemale, aes(fill = genhlth))+ 
+  geom_map(aes(map_id = state), map = map, colour = "gray") + 
+  expand_limits(x = map$long, y = map$lat)+
+  ggtitle('General Health Condition of Females across various US States') 
+
+mapMale <- ggplot (data = HlthByStateMale, aes(fill = genhlth))+ 
+  geom_map(aes(map_id = state), map = map, colour = "gray") + 
+  expand_limits(x = map$long, y = map$lat)+
+  ggtitle('General Health Condition of Males across various US States') 
+```
+
+To output the maps, the function grid.arrange is called on the three variables mapAll, mapFemale and mapMale.
+
+```{r fig.width=13, fig.height= 18}
+grid.arrange(mapAll, mapFemale, mapMale)  
+```
+
+The outputs show that most people responded with either very good or good for their general health condition. From the graph, it seems most people in the north, southwest and northeast generally have very good health as compared most in the south and southeast who had good health. There are also variations among males and females across States. In Idaho, Nebraska and Missouri  most females responded  having very good health as compared to most males responding as having good health. Furthermore, more males in Tennessee and Georgia responded that they had very good health as compared to females in these States.
+
+
+**Research question 2**
+I began by cleaning the data to remove all NAs. The resulting dataframe is stored in brfssCleanedEduRent.
+
+```{r}
+brfssCleanedEduRent <- brfss2013 %>% 
+  filter(!is.na(educa), !is.na(renthom1))
+```
+
+To determine the relationship between education level and whether the person owned or rented an house, I plotted the data in a graph for a visual representation.
+
+```{r}
+ggplot(data = brfssCleanedEduRent, aes(x = renthom1, fill = educa, ))+
+  geom_bar(position = "dodge")+
+  theme(legend.key.size = unit(1, 'cm'), 
+        legend.key.width = unit(0.5, 'cm'), 
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.title = element_text(size=12), 
+        legend.text = element_text(size=6), 
+        axis.text.x = element_text(angle = 330, vjust = 1, hjust = 0.1))
+```
+
+From the graph, it is clear that there is an association between whether a person owns a home or rents one and the level of education. Most respondents who are high school graduate or higher are more likely to own a home than rent one. To explore these variable further, I grouped the respondents based on their response to the two variables and calculated their respective proportions as follows:
+
+```{r}
+EduRenthome <- brfssCleanedEduRent %>% 
+  group_by(renthom1,educa) %>% 
+  summarise (count = n())
+
+EduRenthome <- EduRenthome %>% 
+  mutate(Proportion = count/sum(EduRenthome$count)*100)
+
+print(EduRenthome)
+```
+
+From the table above, it can be clearly deduced that the greatest proportion of respondents who own a home are those with a higher educational level i.e. high school graduates and above. This shows that there is a correlation between level of education and the ability to own a home.
+
+
+**Research question 3**
+To begin, I cleaned the data to get rid of NAs and other unwanted
+responses such as "Told borderline or pre-hypertensive" and "Yes, but female told only during pregnancy". The resulting dataframe is store in sleepBP:
+
+```{r}
+sleepBP <- brfss2013 %>% 
+  filter(!is.na(bphigh4), !is.na(sleptim1), !is.na(sex), 
+  bphigh4 != "Told borderline or pre-hypertensive",
+  bphigh4 != "Yes, but female told only during pregnancy")%>% 
+  select(bphigh4, sex, sleptim1)
+```
+
+I then grouped the data by sex to determine its distribution and other characteristics.
+
+```{r}
+brfssSleepTimeMale <- sleepBP %>% 
+  filter(sex == "Male")
+
+brfssSleepTimeFemale <- sleepBP %>% 
+  filter(sex == "Female")
+```
+
+I plotted each data for the sex to find out its distribution.
+
+```{r}
+ggplot (data = brfssSleepTimeMale, aes(x = sleptim1))+
+  geom_bar(fill = "dark blue")
+ggplot(data = brfssSleepTimeFemale, aes(x = sleptim1))+
+  geom_bar(fill = "deep pink")
+```
+
+From the graphs above, the distribution of sleep times of both males and females are normally distributed. For more information about the distribution, I calculated the summary statistics for each sex and stored in a dataframe:
+
+```{r}
+brfssSleepTimeFemaleStats <- brfssSleepTimeFemale %>% 
+summarise(mean = mean(sleptim1), median = median(sleptim1), sd = sd(sleptim1),
+          min = min(sleptim1), max = max(sleptim1), IQR = IQR(sleptim1))
+            
+brfssSleepTimeMaleStats <- brfssSleepTimeMale %>% 
+  summarise(mean = mean(sleptim1), median = median(sleptim1), sd = sd(sleptim1),
+            min = min(sleptim1), max = max(sleptim1), IQR = IQR(sleptim1))
+
+MaleandFemaleSleep <- rbind(brfssSleepTimeMaleStats, brfssSleepTimeFemaleStats)
+rownames(MaleandFemaleSleep) <- c("Male", "Female")
+print(MaleandFemaleSleep)
+```
+ The table above confirms that data observed visually from the plot. The distribution of sleep times is similar between sexes with a mean of approximately 7 and standard deviation ~1.4.
+ 
+ I further explored the relationship between number of sleep and whether the respondent has ever been told they had high blood pressure. To do this, I created a new dataframe called sleepBP containing the variables bphigh4,  sex and sleptim1. The data was also cleaned in the process.
+ 
+```{r}
+sleepBP <- brfss2013 %>% 
+  filter(!is.na(bphigh4), !is.na(sleptim1), !is.na(sex), 
+         bphigh4 != "Told borderline or pre-hypertensive",
+         bphigh4 != "Yes, but female told only during pregnancy") %>% 
+  select(bphigh4, sex, sleptim1)
+```
+
+With this dataframe, I created a plot using the code below:
+
+```{r}
+ggplot(data = sleepBP, aes(x = sleptim1, fill = bphigh4)) +
+  geom_bar(position = position_dodge(), width = .75) +
+  facet_wrap(~sex, ncol = 2) + 
+  theme(panel.spacing = unit(.25, "lines"), 
+        legend.key.size = unit(1, 'cm'), 
+        legend.key.width = unit(0.5, 'cm'),
+        legend.key.height = unit(0.5, 'cm'), 
+        legend.title = element_text(size=8), 
+        legend.text = element_text(size=6)) + 
+  ylab("Number of Responses") + 
+  xlab("Hours of Sleep")+
+  ggtitle('Hours of Sleep versus Sex and High Blood Pressure') +
+  guides(fill=guide_legend(title= "Has High Blood Pressure?"))
+```
+
+From the graphs, it suggests that high blood pressure does not affect sleep duration in both males and females. However, the graph shows that there were fewer respondents who had ever been told they have high blood pressure. This likely suggests that high blood pressure and sleep duration are disjoint events. From the graph, it is also evident that most of the participants are females and blood pressure does not correlate well with hours of sleep in both sexes.
+
+
